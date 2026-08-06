@@ -44,12 +44,28 @@ def transform_uf(dataframe: pd.DataFrame) -> pd.DataFrame:
     dataframe['rede'] = dataframe['rede'].astype(int)
     return dataframe
 
+def transform_nome_municipio(dataframe: pd.DataFrame) -> pd.DataFrame:
+    df_municipios = pd.read_csv('codigo_municipios.csv')
+    df_municipios['id_municipio'] = df_municipios['id_municipio'].astype(int)
+    dataframe = pd.merge(
+    dataframe,
+    df_municipios[['id_municipio', 'nome_municipio']],
+    on='id_municipio',
+    how='left'
+    )
+    columns = list(dataframe.columns)
+    columns.remove('nome_municipio')
+    idx = columns.index('id_municipio')
+    columns.insert(idx + 1, 'nome_municipio')
+    dataframe.drop(columns=['id_municipio'])
+    return dataframe[columns]
 
 def transform_municipio(dataframe: pd.DataFrame) -> pd.DataFrame:
     dataframe['ano'] = dataframe['ano'].astype(int)
     dataframe['id_municipio'] = dataframe['id_municipio'].astype(int)
     dataframe['serie'] = dataframe['serie'].astype(int)
     dataframe['rede'] = dataframe['rede'].astype(int)
+    dataframe = transform_nome_municipio(dataframe)
     return dataframe
 
 
