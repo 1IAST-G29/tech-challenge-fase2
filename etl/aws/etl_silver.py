@@ -1,32 +1,39 @@
-import os
-import argparse
+import sys
 import logging
 import pandas as pd
-from dotenv import load_dotenv
 from datetime import datetime, timezone
+from awsglue.transforms import *
+from awsglue.utils import getResolvedOptions
+from pyspark.context import SparkContext
+from awsglue.context import GlueContext
+from awsglue.job import Job
 
 
-# Set Argument Parser
-parser = argparse.ArgumentParser(description="ETL Bronze Params")
-parser.add_argument('--gcp-billing-project-id', type=str, help='GCP Billing Project ID. env(GCP_BILLING_PROJECT_ID)')
-parser.add_argument('--bucket-bronze', type=str, help='Bronze Bucket URI. env(BUCKET_BRONZE)')
-parser.add_argument('--bucket-silver', type=str, help='Silver Bucket URI. env(BUCKET_SILVER)')
-parser.add_argument('--log-level', type=str, help='Log level. env(LOG_LEVEL)')
-parser.add_argument('--env', type=str, help='Environment. env(ENV)')
-parser.add_argument('--table', type=str, help='Table to extract. env(TABLE)')
-args = parser.parse_args()
+## @params: [JOB_NAME, GCP_BILLING_PROJECT_ID, BUCKET_BRONZE, LOG_LEVEL, ENV, TABLE]
+args = getResolvedOptions(sys.argv, [
+    'JOB_NAME',
+    'BUCKET_BRONZE',
+    'BUCKET_SILVER',
+    'LOG_LEVEL',
+    'ENV',
+    'TABLE'
+])
+
 
 # Params Initialization
-load_dotenv()
-GCP_BILLING_PROJECT_ID = args.gcp_billing_project_id or os.getenv('GCP_BILLING_PROJECT_ID')
-BUCKET_BRONZE = args.bucket_bronze or os.getenv('BUCKET_BRONZE')
-BUCKET_SILVER = args.bucket_silver or os.getenv('BUCKET_SILVER')
-LOG_LEVEL = args.log_level or os.getenv('LOG_LEVEL', 'INFO')
-ENV = args.env or os.getenv('ENV')
-TABLE = args.table or os.getenv('TABLE')
+JOB_NAME = args['JOB_NAME']
+BUCKET_BRONZE = args['BUCKET_BRONZE']
+BUCKET_SILVER = args['BUCKET_SILVER']
+LOG_LEVEL = args['LOG_LEVEL']
+ENV = args['ENV']
+TABLE = args['TABLE']
 
-if not GCP_BILLING_PROJECT_ID:
-    raise SystemError("GCP_BILLING_PROJECT_ID must be provided either as a command-line argument or an environment variable.")
+logging.basicConfig(
+    level=LOG_LEVEL.upper(),
+    format="%(asctime)s | %(levelname)-8s | %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%SZ",
+)
+log = logging.getLogger(__name__)
 
 if not BUCKET_BRONZE:
     raise SystemError("BUCKET_BRONZE must be provided either as a command-line argument or an environment variable.")
@@ -44,28 +51,11 @@ def transform_uf(dataframe: pd.DataFrame) -> pd.DataFrame:
     dataframe['rede'] = dataframe['rede'].astype(int)
     return dataframe
 
-def transform_nome_municipio(dataframe: pd.DataFrame) -> pd.DataFrame:
-    df_municipios = pd.read_csv('codigo_municipios.csv')
-    df_municipios['id_municipio'] = df_municipios['id_municipio'].astype(int)
-    dataframe = pd.merge(
-    dataframe,
-    df_municipios[['id_municipio', 'nome_municipio']],
-    on='id_municipio',
-    how='left'
-    )
-    columns = list(dataframe.columns)
-    columns.remove('nome_municipio')
-    idx = columns.index('id_municipio')
-    columns.insert(idx + 1, 'nome_municipio')
-    dataframe.drop(columns=['id_municipio'])
-    return dataframe[columns]
-
 def transform_municipio(dataframe: pd.DataFrame) -> pd.DataFrame:
     dataframe['ano'] = dataframe['ano'].astype(int)
     dataframe['id_municipio'] = dataframe['id_municipio'].astype(int)
     dataframe['serie'] = dataframe['serie'].astype(int)
     dataframe['rede'] = dataframe['rede'].astype(int)
-    dataframe = transform_nome_municipio(dataframe)
     return dataframe
 
 
@@ -152,13 +142,7 @@ if TABLE not in map(lambda x: x["name"], TABLES):
     raise SystemError("TABLE must be one of the tables in TABLES.")
 
 # Logger
-logging.basicConfig(
-    level=LOG_LEVEL.upper(),
-    format="%(asctime)s | %(levelname)-8s | %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%SZ",
-)
-log = logging.getLogger(__name__)
-log.debug(f"ENV: {ENV}, LOG_LEVEL: {LOG_LEVEL}, GCP_BILLING_PROJECT_ID: {GCP_BILLING_PROJECT_ID}, BUCKET_BRONZE: {BUCKET_BRONZE}, BUCKET_SILVER: {BUCKET_SILVER}, TABLE: {TABLE}")
+log.debug(f"ENV: {ENV}, LOG_LEVEL: {LOG_LEVEL}, BUCKET_BRONZE: {BUCKET_BRONZE}, BUCKET_SILVER: {BUCKET_SILVER}, TABLE: {TABLE}")
 
 # Functions
 def extract(table: dict[str, str]) -> pd.DataFrame:
@@ -200,6 +184,12 @@ def load(table: dict[str, str], dataframe: pd.DataFrame):
 
 # Execution
 if __name__ == "__main__":
+    sc = SparkContext()
+    glueContext = GlueContext(sc)
+    spark = glueContext.spark_session
+    job = Job(glueContext)
+    job.init(args['JOB_NAME'], args)
+
     log.info(f"Starting ETL Silver process...")
     init_time = datetime.now()
 
@@ -210,3 +200,4 @@ if __name__ == "__main__":
 
     elapsed_time = datetime.now() - init_time
     log.info(f"ETL Silver process completed. Extracted data for {len(dataframe)} tables in {elapsed_time.total_seconds():.1f} seconds.")
+    job.commit()
