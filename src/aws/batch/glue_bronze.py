@@ -41,61 +41,52 @@ TABLES = [
         "name": "uf",
         "path": "basedosdados.br_inep_avaliacao_alfabetizacao.uf",
         "checks": [
-            {"column": "ano", "rule": "not_null", "critico": True},
+            {"column": "ano", "rule": "not_null", "force_fail": True},
+            {"column": "sigla_uf", "rule": "not_null", "force_fail": True},
         ]
     },
     {
         "name": "municipio",
         "path": "basedosdados.br_inep_avaliacao_alfabetizacao.municipio",
         "checks": [
-            {"tipo": "min_count", "valor": 1,      "critico": True},
-            {"tipo": "not_null",  "coluna": "id",   "critico": True},
-            {"tipo": "not_null",  "coluna": "nome","critico": True},
+            {"column": "ano", "rule": "not_null", "force_fail": True},
+            {"column": "id_municipio", "rule": "not_null", "force_fail": True},
         ]
     },
     {
         "name": "alunos",
         "path": "basedosdados.br_inep_avaliacao_alfabetizacao.alunos",
         "checks": [
-            {"tipo": "min_count", "valor": 1,      "critico": True},
-            {"tipo": "not_null",  "coluna": "id",   "critico": True},
-            {"tipo": "not_null",  "coluna": "nome","critico": True},
+            {"column": "ano", "rule": "not_null", "force_fail": True},
+            {"column": "id_aluno", "rule": "not_null", "force_fail": True},
         ]
     },
     {
         "name": "dicionario",
         "path": "basedosdados.br_inep_avaliacao_alfabetizacao.dicionario",
-        "checks": [
-            {"tipo": "min_count", "valor": 1,      "critico": True},
-            {"tipo": "not_null",  "coluna": "id",   "critico": True},
-            {"tipo": "not_null",  "coluna": "nome","critico": True},
-        ]
     },
     {
         "name": "meta_alfabetizacao_brasil",
         "path": "basedosdados.br_inep_avaliacao_alfabetizacao.meta_alfabetizacao_brasil",
         "checks": [
-            {"tipo": "min_count", "valor": 1,      "critico": True},
-            {"tipo": "not_null",  "coluna": "id",   "critico": True},
-            {"tipo": "not_null",  "coluna": "nome","critico": True},
+            {"column": "ano", "rule": "not_null", "force_fail": True},
+            {"column": "taxa_alfabetizacao", "rule": "not_null", "force_fail": True},
         ]
     },
     {
         "name": "meta_alfabetizacao_municipio",
         "path": "basedosdados.br_inep_avaliacao_alfabetizacao.meta_alfabetizacao_municipio",
         "checks": [
-            {"tipo": "min_count", "valor": 1,      "critico": True},
-            {"tipo": "not_null",  "coluna": "id",   "critico": True},
-            {"tipo": "not_null",  "coluna": "nome","critico": True},
+            {"column": "ano", "rule": "not_null", "force_fail": True},
+            {"column": "id_municipio", "rule": "not_null", "force_fail": True},
         ]
     },
     {
         "name": "meta_alfabetizacao_uf",
         "path": "basedosdados.br_inep_avaliacao_alfabetizacao.meta_alfabetizacao_uf",
         "checks": [
-            {"tipo": "min_count", "valor": 1,      "critico": True},
-            {"tipo": "not_null",  "coluna": "id",   "critico": True},
-            {"tipo": "not_null",  "coluna": "nome","critico": True},
+            {"column": "ano", "rule": "not_null", "force_fail": True},
+            {"column": "sigla_uf", "rule": "not_null", "force_fail": True},
         ]
     }
 ]
@@ -150,11 +141,26 @@ def transform(dataframe: DataFrame, job_name: str) -> DataFrame:
 def quality_check(dataframe: DataFrame, table: dict[str, str]) -> None:
     """Perform quality checks on the DataFrame."""
 
+    if 'checks' in table and len(table['checks']) > 0:
+        for check in table['checks']:
+            column = check['column']
+            rule = check['rule']
+            force_fail = check.get('force_fail', False)
+            
+            if rule == "not_null":
+                null_count = dataframe.filter(F.col(column).isNull()).count()
+                if null_count > 0:
+                    message = f"Quality check failed: Column '{column}' contains {null_count} null values."
+                    if force_fail:
+                        raise ValueError(message)
+                    else:
+                        log.warning(message)
 
-def load(dataframe: DataFrame, bucket_bronze: str, table_id: str) -> str:
+
+def load(dataframe: DataFrame, bucket_bronze: str, table_name: str) -> str:
     """Load the DataFrame into S3 in Parquet format, partitioned by year."""
 
-    path = f"{bucket_bronze}/{table_id}"
+    path = f"{bucket_bronze}/{table_name}"
     dataframe.write.partitionBy("_year").mode("overwrite").parquet(path)
     return path
 
@@ -188,8 +194,9 @@ dataframe_transformed = transform(dataframe, JOB_NAME)
 log.info(f"Transformed dataframe with {dataframe_transformed.count()} rows and {len(dataframe_transformed.columns)} columns.")
 
 quality_check(dataframe_transformed, table)
+log.info(f"Quality checks passed for table {table['path']}.")
 
-load_path = load(dataframe_transformed, BUCKET_BRONZE, table['path'])
+load_path = load(dataframe_transformed, BUCKET_BRONZE, table['name'])
 log.info(f"Transformed dataframe saved to {load_path}.")
 
 job.commit()
