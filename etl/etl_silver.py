@@ -39,9 +39,12 @@ if not TABLE:
 
 
 def transform_uf(dataframe: pd.DataFrame) -> pd.DataFrame:
+    dataframe = dataframe.drop_duplicates(subset=['ano', 'sigla_uf', 'serie', 'rede'])
     dataframe['ano'] = dataframe['ano'].astype(int)
     dataframe['serie'] = dataframe['serie'].astype(int)
     dataframe['rede'] = dataframe['rede'].astype(int)
+    dataframe['taxa_alfabetizacao'] = pd.to_numeric(dataframe['taxa_alfabetizacao'], errors='coerce')
+    dataframe['media_portugues'] = pd.to_numeric(dataframe['media_portugues'], errors='coerce')
     return dataframe
 
 def transform_nome_municipio(dataframe: pd.DataFrame) -> pd.DataFrame:
@@ -61,15 +64,19 @@ def transform_nome_municipio(dataframe: pd.DataFrame) -> pd.DataFrame:
     return dataframe[columns]
 
 def transform_municipio(dataframe: pd.DataFrame) -> pd.DataFrame:
+    dataframe = dataframe.drop_duplicates(subset=['ano', 'id_municipio', 'serie', 'rede'])
     dataframe['ano'] = dataframe['ano'].astype(int)
     dataframe['id_municipio'] = dataframe['id_municipio'].astype(int)
     dataframe['serie'] = dataframe['serie'].astype(int)
     dataframe['rede'] = dataframe['rede'].astype(int)
+    dataframe['taxa_alfabetizacao'] = pd.to_numeric(dataframe['taxa_alfabetizacao'], errors='coerce')
+    dataframe['media_portugues'] = pd.to_numeric(dataframe['media_portugues'], errors='coerce')
     dataframe = transform_nome_municipio(dataframe)
     return dataframe
 
 
 def transform_alunos(dataframe: pd.DataFrame) -> pd.DataFrame:
+    dataframe = dataframe.drop_duplicates(subset=['ano', 'id_aluno'])
     dataframe['ano'] = dataframe['ano'].astype(int)
     dataframe['id_municipio'] = dataframe['id_municipio'].astype(int)
     dataframe['id_escola'] = dataframe['id_escola'].astype(int)
@@ -80,6 +87,11 @@ def transform_alunos(dataframe: pd.DataFrame) -> pd.DataFrame:
     dataframe['presenca'] = dataframe['presenca'].astype(int)
     dataframe['preenchimento_caderno'] = dataframe['preenchimento_caderno'].astype(int)
     dataframe['alfabetizado'] = dataframe['alfabetizado'].astype(int)
+    dataframe['proficiencia'] = pd.to_numeric(dataframe['proficiencia'], errors='coerce')
+    dataframe['peso_aluno'] = pd.to_numeric(dataframe['peso_aluno'], errors='coerce')
+    valid_prof = dataframe['proficiencia'].notnull()
+    dataframe.loc[valid_prof, 'alfabetizado'] = (dataframe.loc[valid_prof, 'proficiencia'] >= 743.0).astype(int)
+    dataframe = transform_nome_municipio(dataframe)
     return dataframe
 
 
@@ -91,21 +103,34 @@ def transform_dicionario(dataframe: pd.DataFrame) -> pd.DataFrame:
 
 
 def transform_meta_alfabetizacao_brasil(dataframe: pd.DataFrame) -> pd.DataFrame:
+    dataframe = dataframe.drop_duplicates(subset=['ano', 'rede'])
     dataframe['ano'] = dataframe['ano'].astype(int)
+    columns_to_typing = ['taxa_alfabetizacao','meta_alfabetizacao_2024','meta_alfabetizacao_2025','meta_alfabetizacao_2026','meta_alfabetizacao_2027','meta_alfabetizacao_2028','meta_alfabetizacao_2029','meta_alfabetizacao_2030','percentual_participacao']
+    for col in columns_to_typing:
+        dataframe[col] = pd.to_numeric(dataframe[col], errors='coerce')
     return dataframe
 
 
 
 def transform_meta_alfabetizacao_municipio(dataframe: pd.DataFrame) -> pd.DataFrame:
+    dataframe = dataframe.drop_duplicates(subset=['ano', 'id_municipio', 'rede'])
     dataframe['ano'] = dataframe['ano'].astype(int)
     dataframe['id_municipio'] = dataframe['id_municipio'].astype(int)
     dataframe['nivel_alfabetizacao'] = dataframe['nivel_alfabetizacao'].apply(lambda x: int(x) if pd.notnull(x) else None)
+    columns_to_typing = ['taxa_alfabetizacao','meta_alfabetizacao_2024','meta_alfabetizacao_2025','meta_alfabetizacao_2026','meta_alfabetizacao_2027','meta_alfabetizacao_2028','meta_alfabetizacao_2029','meta_alfabetizacao_2030','percentual_participacao']
+    for col in columns_to_typing:
+        dataframe[col] = pd.to_numeric(dataframe[col], errors='coerce')
+    dataframe = transform_nome_municipio(dataframe)
     return dataframe
 
 
 
 def transform_meta_alfabetizacao_uf(dataframe: pd.DataFrame) -> pd.DataFrame:
+    dataframe = dataframe.drop_duplicates(subset=['ano', 'sigla_uf', 'rede'])
     dataframe['ano'] = dataframe['ano'].astype(int)
+    columns_to_typing = ['taxa_alfabetizacao','meta_alfabetizacao_2024','meta_alfabetizacao_2025','meta_alfabetizacao_2026','meta_alfabetizacao_2027','meta_alfabetizacao_2028','meta_alfabetizacao_2029','meta_alfabetizacao_2030','percentual_participacao']
+    for col in columns_to_typing:
+        dataframe[col] = pd.to_numeric(dataframe[col], errors='coerce')
     return dataframe
     
 
