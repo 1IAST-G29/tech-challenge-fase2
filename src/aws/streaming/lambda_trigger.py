@@ -1,33 +1,56 @@
 import json
+import os
+import random
 import boto3
+import time
 
-# Inicializa o cliente do Kinesis fora do handler (boas práticas para reutilização de conexões)
-kinesis_client = boto3.client('kinesis')
+
+kinesis = boto3.client("kinesis")
+STREAM_NAME = os.environ["KINESIS_STREAM_NAME"]
+
+
+def generate_event():
+    return {
+        "ano": random.randint(2026, 2030),
+        "id_municipio": random.randint(1100015, 5300108),
+        "id_escola": random.randint(60000001, 60001000),
+        "id_aluno": random.randint(11000001, 11001000),
+        "caderno": random.randint(1, 50),
+        "serie": 2,
+        "rede": random.choice([2, 3, 4]),
+        "presenca": random.choice([0, 1]),
+        "preenchimento_caderno": random.choice([0, 1]),
+        "alfabetizado": random.choice([0, 1]),
+        "proficiencia": round(random.uniform(0, 1000), 2),
+        "peso_aluno": round(random.uniform(0, 1), 4),
+    }
+
 
 def lambda_handler(event, context):
-    stream_name = 'fiap-kinesis'
-    
-    # Dados que você quer enviar
-    payload = {
-        "id": "12345",
-        "status": "sucesso",
-        "mensagem": "Dados processados pela Lambda"
+    number_of_events = int(event.get("number_of_events", 5))
+    successful = 0
+
+    for _ in range(number_of_events):
+        mock_event = generate_event()
+        try:
+            response = kinesis.put_record(
+                StreamName=STREAM_NAME,
+                Data=json.dumps(mock_event).encode("utf-8"),
+                PartitionKey=str(mock_event["id_municipio"])
+            )
+            successful += 1
+        except Exception as e:
+            print(f"Failed to send event: {mock_event}. Error: {e}")
+
+        finally:
+            time.sleep(random.choice([0, 1, 2, 3]))
+
+    return {
+        "statusCode": 200,
+        "body": json.dumps({
+            "message": "Eventos enviados para o Kinesis",
+            "requested": number_of_events,
+            "successful": successful,
+            "failed": number_of_events - successful
+        })
     }
-    
-    try:
-        response = kinesis_client.put_record(
-            StreamName=stream_name,
-            Data=json.dumps(payload), # O Kinesis exige os dados em formato de bytes/string JSON
-            PartitionKey='chave-de-particao-1' # Define em qual shard o dado vai cair
-        )
-        
-        print(f"Registro enviado com sucesso. SequenceNumber: {response['SequenceNumber']}")
-        
-        return {
-            'statusCode': 200,
-            'body': json.dumps('Dado enviado ao Kinesis com sucesso!')
-        }
-        
-    except Exception as e:
-        print(f"Erro ao enviar para o Kinesis: {str(e)}")
-        raise e
