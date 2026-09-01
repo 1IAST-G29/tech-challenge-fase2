@@ -36,25 +36,32 @@ BUCKET_SILVER = args['BUCKET_SILVER']
 
 def transform_uf(dataframe: DataFrame) -> DataFrame:
     dataframe = (dataframe
+                    .dropDuplicates(['ano', 'sigla_uf', 'serie', 'rede'])
                     .withColumn("ano", F.col("ano").cast("int"))
                     .withColumn("serie", F.col("serie").cast("int"))
                     .withColumn("rede", F.col("rede").cast("int"))
+                    .withColumn("taxa_alfabetizacao", F.col("taxa_alfabetizacao").cast("double"))
+                    .withColumn("media_portugues", F.col("media_portugues").cast("double"))
         )
     return dataframe
 
 
 def transform_municipio(dataframe: DataFrame) -> DataFrame:
     dataframe = (dataframe
+                    .dropDuplicates(['ano', 'id_municipio', 'serie', 'rede'])
                     .withColumn("ano", F.col("ano").cast("int"))
                     .withColumn("id_municipio", F.col("id_municipio").cast("int"))
                     .withColumn("serie", F.col("serie").cast("int"))
                     .withColumn("rede", F.col("rede").cast("int"))
+                    .withColumn("taxa_alfabetizacao", F.col("taxa_alfabetizacao").cast("double"))
+                    .withColumn("media_portugues", F.col("media_portugues").cast("double"))
         )
     return dataframe
 
 
 def transform_alunos(dataframe: DataFrame) -> DataFrame:
     dataframe = (dataframe
+                    .dropDuplicates(['ano', 'id_aluno'])
                     .withColumn("ano", F.col("ano").cast("int"))
                     .withColumn("id_municipio", F.col("id_municipio").cast("int"))
                     .withColumn("id_escola", F.col("id_escola").cast("int"))
@@ -65,6 +72,12 @@ def transform_alunos(dataframe: DataFrame) -> DataFrame:
                     .withColumn("presenca", F.col("presenca").cast("int"))
                     .withColumn("preenchimento_caderno", F.col("preenchimento_caderno").cast("int"))
                     .withColumn("alfabetizado", F.col("alfabetizado").cast("int"))
+                    .withColumn("proficiencia", F.col("proficiencia").cast("double").isNotNull())
+                    .withColumn("peso_aluno", F.col("peso_aluno").cast("double"))
+                    .withColumn('alfabetizado', F.when(
+                        F.col('proficiencia').isNotNull(),
+                        (F.col('proficiencia') >= 743.0).cast('integer')
+                    ))
         )
     return dataframe
 
@@ -75,21 +88,43 @@ def transform_dicionario(dataframe: DataFrame) -> DataFrame:
 
 
 def transform_meta_alfabetizacao_brasil(dataframe: DataFrame) -> DataFrame:
-    dataframe = dataframe.withColumn("ano", F.col("ano").cast("int"))
+    dataframe = (dataframe
+                    .dropDuplicates(['ano', 'rede'])
+                    .withColumn("ano", F.col("ano").cast("int"))
+        )
+
+    columns_to_typing = ['taxa_alfabetizacao','meta_alfabetizacao_2024','meta_alfabetizacao_2025','meta_alfabetizacao_2026','meta_alfabetizacao_2027','meta_alfabetizacao_2028','meta_alfabetizacao_2029','meta_alfabetizacao_2030','percentual_participacao']
+    for col in columns_to_typing:
+        dataframe = dataframe.withColumn(col, F.col(col).cast("double"))
+    
     return dataframe
 
 
 def transform_meta_alfabetizacao_municipio(dataframe: DataFrame) -> DataFrame:
     dataframe = (dataframe
+                    .dropDuplicates(['ano', 'id_municipio', 'rede'])
                     .withColumn("ano", F.col("ano").cast("int"))
                     .withColumn("id_municipio", F.col("id_municipio").cast("int"))
                     .withColumn("nivel_alfabetizacao", F.col("nivel_alfabetizacao").cast("int"))
                 )
+
+    columns_to_typing = ['taxa_alfabetizacao','meta_alfabetizacao_2024','meta_alfabetizacao_2025','meta_alfabetizacao_2026','meta_alfabetizacao_2027','meta_alfabetizacao_2028','meta_alfabetizacao_2029','meta_alfabetizacao_2030','percentual_participacao']
+    for col in columns_to_typing:
+        dataframe = dataframe.withColumn(col, F.col(col).cast("double"))
+
     return dataframe
 
 
 def transform_meta_alfabetizacao_uf(dataframe: DataFrame) -> DataFrame:
-    dataframe = dataframe.withColumn("ano", F.col("ano").cast("int"))
+    dataframe = (dataframe
+                    .dropDuplicates(['ano', 'sigla_uf', 'rede'])
+                    .withColumn("ano", F.col("ano").cast("int"))
+                )
+    
+    columns_to_typing = ['taxa_alfabetizacao','meta_alfabetizacao_2024','meta_alfabetizacao_2025','meta_alfabetizacao_2026','meta_alfabetizacao_2027','meta_alfabetizacao_2028','meta_alfabetizacao_2029','meta_alfabetizacao_2030','percentual_participacao']
+    for col in columns_to_typing:
+        dataframe = dataframe.withColumn(col, F.col(col).cast("double"))
+
     return dataframe
 
 
@@ -105,6 +140,9 @@ TABLES = [
     {
         "name": "alunos",
         "transformer": transform_alunos,
+        "checks": [
+            {"column": "proficiencia", "rule": "range(0,1000)", "force_fail": True}
+        ]
     },
     {
         "name": "dicionario",
@@ -157,6 +195,28 @@ def transform(dataframe: DataFrame, transformer: callable) -> DataFrame:
     return transformed_dataframe
 
 
+def quality_check(dataframe: DataFrame, table: dict[str, str]) -> None:
+    """Perform quality checks on the DataFrame."""
+
+    if 'checks' in table and len(table['checks']) > 0:
+        for check in table['checks']:
+            column = check['column']
+            rule = check['rule']
+            force_fail = check.get('force_fail', False)
+            
+            if "range" in rule:
+                range_values = rule.replace("range(", "").replace(")", "").split(",")
+                min_value = float(range_values[0])
+                max_value = float(range_values[1])
+                out_of_range_count = dataframe.filter((F.col(column) < min_value) | (F.col(column) > max_value)).count()
+                if out_of_range_count > 0:
+                    message = f"Quality check failed: Column '{column}' contains {out_of_range_count} values out of range [{min_value}, {max_value}]."
+                    if force_fail:
+                        raise ValueError(message)
+                    else:
+                        log.warning(message)
+
+
 def load(dataframe: DataFrame, bucket_silver: str, table_name: str) -> str:
     """Load the DataFrame into S3 in Parquet format, partitioned by year."""
 
@@ -191,6 +251,9 @@ log.info(f"Fetched {dataframe.count()} rows from bucket {BUCKET_BRONZE}.")
 
 dataframe_transformed = transform(dataframe, table['transformer'])
 log.info(f"Transformed dataframe with {dataframe_transformed.count()} rows and {len(dataframe_transformed.columns)} columns.")
+
+quality_check(dataframe_transformed, table)
+log.info(f"Quality checks passed for table {table['name']}.")
 
 load_path = load(dataframe_transformed, BUCKET_SILVER, table['name'])
 log.info(f"Transformed dataframe saved to {load_path}.")
