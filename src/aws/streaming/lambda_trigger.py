@@ -1,9 +1,9 @@
 import json
 import os
 import random
-import boto3
 import time
 
+import boto3
 
 kinesis = boto3.client("kinesis")
 STREAM_NAME = os.environ["KINESIS_STREAM_NAME"]

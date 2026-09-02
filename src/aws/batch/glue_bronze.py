@@ -131,7 +131,7 @@ def transform(dataframe: DataFrame, job_name: str) -> DataFrame:
 
     dataframe = (
         dataframe
-        .withColumn("_ingestion_timestamp", F.current_timestamp())
+        .withColumn("_ingested_at", F.current_timestamp())
         .withColumn("_job_name", F.lit(job_name))
         .withColumn("_year", year)
     )

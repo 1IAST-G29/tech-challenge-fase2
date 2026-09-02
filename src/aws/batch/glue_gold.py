@@ -18,7 +18,7 @@ from pyspark.sql.window import Window
 #   --TABLE_NAME          meta_alfabetizacao_brasil
 #   --BUCKET_SILVER       s3://bucket/silver
 #   --BUCKET_GOLD         s3://bucket/gold
-#   --BUCKET_GOLD         s3://bucket/assets
+#   --BUCKET_ASSETS         s3://bucket/assets
 
 args = getResolvedOptions(sys.argv, [
     'JOB_NAME',
