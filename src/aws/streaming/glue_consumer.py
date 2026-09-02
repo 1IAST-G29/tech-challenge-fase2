@@ -65,7 +65,6 @@ ALUNOS_SCHEMA = StructType([
 # EXECUTION
 # ============================================================
 
-args = getResolvedOptions(sys.argv, ['JOB_NAME'])
 sc = SparkContext()
 glueContext = GlueContext(sc)
 spark = glueContext.spark_session

@@ -72,7 +72,7 @@ def transform_alunos(dataframe: DataFrame) -> DataFrame:
                     .withColumn("presenca", F.col("presenca").cast("int"))
                     .withColumn("preenchimento_caderno", F.col("preenchimento_caderno").cast("int"))
                     .withColumn("alfabetizado", F.col("alfabetizado").cast("int"))
-                    .withColumn("proficiencia", F.col("proficiencia").cast("double").isNotNull())
+                    .withColumn("proficiencia", F.col("proficiencia").cast("double"))
                     .withColumn("peso_aluno", F.col("peso_aluno").cast("double"))
                     .withColumn('alfabetizado', F.when(
                         F.col('proficiencia').isNotNull(),
